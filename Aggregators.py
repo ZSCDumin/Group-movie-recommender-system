@@ -8,7 +8,7 @@ class Aggregators:
 
     @staticmethod
     def average(arr):
-        return np.average(arr, axis = 0, weights = None)
+        return np.average(arr, axis=0, weights=None)
 
     @staticmethod
     def average_bf(arr):
@@ -16,7 +16,7 @@ class Aggregators:
             warnings.simplefilter("ignore", category=RuntimeWarning)
             arr[arr == 0] = np.nan
             return np.nanmean(arr, axis=0)
-    
+
     @staticmethod
     def weighted_average(arr, weights):
-        return np.average(arr, axis = 0, weights = weights)
+        return np.average(arr, axis=0, weights=weights)

@@ -6,7 +6,6 @@ from sklearn.metrics import mean_squared_error
 import numpy as np
 import pandas as ps
 
-
 # overflow warnings should be raised as errors
 np.seterr(over='raise')
 
@@ -14,22 +13,22 @@ np.seterr(over='raise')
 class GroupRec:
     def __init__(self):
         self.cfg = Config(r"./config.conf")
-        
+
         # training and testing matrices
         self.ratings = None
         self.test_ratings = None
 
         self.groups = []
-        
+
         # read data into above matrices
         self.read_data()
-        
+
         self.num_users = self.ratings.shape[0]
         self.num_items = self.ratings.shape[1]
-        
+
         # predicted ratings matrix based on factors.
         self.predictions = np.zeros((self.num_users, self.num_items))
-        
+
         # output after svd factorization
         # initialize all unknowns with random values from -1 to 1
         self.user_factors = np.random.uniform(-1, 1, (self.ratings.shape[0], self.cfg.num_factors))
@@ -37,7 +36,7 @@ class GroupRec:
 
         self.user_biases = np.zeros(self.num_users)
         self.item_biases = np.zeros(self.num_items)
-        
+
         # global mean of ratings a.k.a mu
         self.ratings_global_mean = 0
 
@@ -66,34 +65,37 @@ class GroupRec:
     # add list of groups
     def add_groups(self, groups):
         self.groups = groups
-    
+
     # remove groups
     def remove_groups(self, groups):
         self.groups = []
-    
+
     def predict_user_rating(self, user, item):
         prediction = self.ratings_global_mean + self.user_biases[user] + self.item_biases[item]
         prediction += self.user_factors[user, :].dot(self.item_factors[item, :].T)
         return prediction
-    
+
     def predict_group_rating(self, grp, item, method):
         bias_grp = 0
         factors = np.nan
         if method == 'af':
-            factors = grp.grp_factors_af; bias_grp = grp.bias_af
+            factors = grp.grp_factors_af;
+            bias_grp = grp.bias_af
         elif method == 'bf':
-            factors = grp.grp_factors_bf; bias_grp = grp.bias_bf
+            factors = grp.grp_factors_bf;
+            bias_grp = grp.bias_bf
         elif method == 'wbf':
-            factors = grp.grp_factors_wbf; bias_grp = grp.bias_wbf
-        
+            factors = grp.grp_factors_wbf;
+            bias_grp = grp.bias_wbf
+
         return self.ratings_global_mean + bias_grp + self.item_biases[item] \
-                                        + np.dot(factors.T, self.item_factors[item])
+               + np.dot(factors.T, self.item_factors[item])
 
     def predict_all_ratings(self):
         for user in range(self.num_users):
             for item in range(self.num_items):
                 self.predictions[user, item] = self.predict_user_rating(user, item)
-        
+
     # matrix factorization code
     def sgd_factorize(self):
         regularization = self.cfg.lambda_mf
@@ -104,32 +106,32 @@ class GroupRec:
         # solve for these for matrix ratings
         ratings_row, ratings_col = self.ratings.nonzero()
         num_ratings = len(ratings_row)
-        
+
         print 'Doing matrix factorization...'
         try:
             for iter in range(self.cfg.max_iterations_mf):
                 print 'Iteration: ', iter
                 rating_indices = np.arange(num_ratings)
                 np.random.shuffle(rating_indices)
-                
+
                 for idx in rating_indices:
                     user = ratings_row[idx]
                     item = ratings_col[idx]
 
                     pred = self.predict_user_rating(user, item)
                     error = self.ratings[user][item] - pred
-                    
+
                     self.user_factors[user] += learning_rate * ((error * self.item_factors[item])
-                                                    - (regularization * self.user_factors[user]))
+                                                                - (regularization * self.user_factors[user]))
                     self.item_factors[item] += learning_rate * ((error * self.user_factors[user])
-                                                    - (regularization * self.item_factors[item]))
-                    
+                                                                - (regularization * self.item_factors[item]))
+
                     self.user_biases[user] += learning_rate * (error - regularization * self.user_biases[user])
                     self.item_biases[item] += learning_rate * (error - regularization * self.item_biases[item])
-            
+
                 if self.cfg.is_debug:
                     self.sgd_mse()
-            
+
         except FloatingPointError:
             print 'Floating point Error: '
 
@@ -137,10 +139,10 @@ class GroupRec:
         self.predict_all_ratings()
         predicted_training_ratings = self.predictions[self.ratings.nonzero()].flatten()
         actual_training_ratings = self.ratings[self.ratings.nonzero()].flatten()
-        
+
         predicted_test_ratings = self.predictions[self.test_ratings.nonzero()].flatten()
         actual_test_ratings = self.test_ratings[self.test_ratings.nonzero()].flatten()
-    
+
         training_mse = mean_squared_error(predicted_training_ratings, actual_training_ratings)
         print 'training mse: ', training_mse
 
@@ -151,12 +153,12 @@ class GroupRec:
     def af_runner(self, grps=None, aggregator=Aggregators.average):
         if grps is None:
             grps = self.groups
-        
+
         # calculate factors
         for grp in grps:
             member_factors = self.user_factors[grp.members, :]
             member_biases = self.user_biases[grp.members]
-        
+
             # aggregate the factors
             if aggregator == Aggregators.average:
                 grp.grp_factors_af = aggregator(member_factors)
@@ -238,7 +240,7 @@ class GroupRec:
 
             if is_wbf:
                 W = self.get_weight_matrix(grp, watched_items)
-                factor_n_bias = np.dot(np.linalg.inv(np.dot(np.dot(A.T, W),A) + lamb * np.identity(self.cfg.num_factors + 1)), np.dot(np.dot(A.T, W), s_g))
+                factor_n_bias = np.dot(np.linalg.inv(np.dot(np.dot(A.T, W), A) + lamb * np.identity(self.cfg.num_factors + 1)), np.dot(np.dot(A.T, W), s_g))
                 grp.grp_factors_wbf = factor_n_bias[:-1]
                 grp.bias_wbf = factor_n_bias[-1]
                 self.make_recommendations_for_wbf(grp)
@@ -258,7 +260,7 @@ class GroupRec:
             (precision, recall, tp, fp) = grp.evaluate_af(self.cfg.is_debug)
             af_precision_list.append(precision)
             af_recall_list.append(recall)
-        
+
         af_mean_precision = np.nanmean(np.array(af_precision_list))
         af_mean_recall = np.nanmean(np.array(af_recall_list))
         print '\nAF method: mean precision: ', af_mean_precision
@@ -304,14 +306,14 @@ class GroupRec:
 
         # evaluation
         self.evaluation()
-    
+
 
 if __name__ == "__main__":
     gr = GroupRec()
 
     # factorize matrix
     gr.sgd_factorize()
-    
+
     # add groups or generate random groups of given size
     groups = []
 
@@ -322,23 +324,29 @@ if __name__ == "__main__":
 
     # disjoint means none of the groups shares any common members
     small_groups = Group.generate_groups(gr.ratings, gr.test_ratings, gr.num_users, gr.cfg.no_of_small_grps, gr.cfg.small_grp_size, disjoint=False)
-    medium_groups = Group.generate_groups(gr.ratings, gr.test_ratings, gr.num_users, gr.cfg.no_of_medium_grps, gr.cfg.medium_grp_size, disjoint=False)
-    large_groups = Group.generate_groups(gr.ratings, gr.test_ratings, gr.num_users, gr.cfg.no_of_large_grps, gr.cfg.large_grp_size, disjoint=False)
-    
-    group_set = [small_groups, medium_groups, large_groups]
-    group_type = ['small', 'medium', 'large']
-    
-    for idx, groups in enumerate(group_set):
-        if groups is []:
-            continue
-        
-        # generated groups
-        n = len(groups) if gr.cfg.is_debug else 5
-        print '\n******* Running for ', group_type[idx], ' groups *************'
-        print 'generated groups (only %d are getting printed here): ' % n
-        for group in groups[:n]:
-            print(group.members)
-        
-        gr.add_groups(groups)
-        gr.run_all_methods(groups)
-        gr.remove_groups(groups)
+
+    print small_groups[0].members
+    print small_groups[0].ratings_per_member
+    print small_groups[0].candidate_items
+    print small_groups[0].actual_recos
+    print small_groups[0].false_positive
+    # medium_groups = Group.generate_groups(gr.ratings, gr.test_ratings, gr.num_users, gr.cfg.no_of_medium_grps, gr.cfg.medium_grp_size, disjoint=False)
+    # large_groups = Group.generate_groups(gr.ratings, gr.test_ratings, gr.num_users, gr.cfg.no_of_large_grps, gr.cfg.large_grp_size, disjoint=False)
+    #
+    # group_set = [small_groups, medium_groups, large_groups]
+    # group_type = ['small', 'medium', 'large']
+    #
+    # for idx, groups in enumerate(group_set):
+    #     if groups is []:
+    #         continue
+    #
+    #     # generated groups
+    #     n = len(groups) if gr.cfg.is_debug else 5
+    #     print '\n******* Running for ', group_type[idx], ' groups *************'
+    #     print 'generated groups (only %d are getting printed here): ' % n
+    #     for group in groups[:n]:
+    #         print(group.members)
+    #
+    #     gr.add_groups(groups)
+    #     gr.run_all_methods(groups)
+    #     gr.remove_groups(groups)
